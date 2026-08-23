@@ -1,0 +1,45 @@
+{
+  "name": "sasyashri",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "build:web": "turbo run build --filter=@sasyashri/web",
+    "build:api": "turbo run build --filter=@sasyashri/api",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:e2e": "turbo run test:e2e",
+    "test:api": "turbo run test:api",
+    "db:generate": "turbo run db:generate --filter=@sasyashri/database",
+    "db:migrate:dev": "turbo run db:migrate:dev --filter=@sasyashri/database",
+    "db:migrate:deploy": "turbo run db:migrate:deploy --filter=@sasyashri/database",
+    "db:seed": "turbo run db:seed --filter=@sasyashri/database",
+    "db:studio": "turbo run db:studio --filter=@sasyashri/database",
+    "db:push": "turbo run db:push --filter=@sasyashri/database",
+    "db:reset": "turbo run db:migrate:reset --filter=@sasyashri/database",
+    "docker:dev": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "docker:dev:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "docker:prod": "docker compose -f infra/docker/docker-compose.prod.yml up -d",
+    "docker:prod:down": "docker compose -f infra/docker/docker-compose.prod.yml down",
+    "clean": "turbo run clean && rm -rf node_modules .turbo"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.0",
+    "@types/node": "^20.11.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

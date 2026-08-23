@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm:*)",
+      "Bash(docker:*)",
+      "Bash(docker compose:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(curl:*)",
+      "Bash(openssl:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(jq:*)",
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)",
+      "Glob(**)",
+      "Grep(**)",
+      "Task(*)",
+      "WebFetch(*)",
+      "WebSearch(*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(sudo:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "command": "echo \"[PRE] $(date): $TOOL_INPUT\" >> .claude/hooks.log"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "command": "echo \"[POST] $(date): Exit=$TOOL_RESULT_EXIT_CODE\" >> .claude/hooks.log"
+      }
+    ]
+  },
+  "env": {
+    "NODE_ENV": "development",
+    "DATABASE_URL": "postgresql://sasyashri:sasyashri_dev_password@localhost:5432/sasyashri?schema=public",
+    "REDIS_URL": "redis://localhost:6379",
+    "NEXT_PUBLIC_API_URL": "http://localhost:4000",
+    "NEXT_PUBLIC_APP_URL": "http://localhost:3000"
+  }
+}

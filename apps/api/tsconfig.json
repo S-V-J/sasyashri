@@ -1,0 +1,29 @@
+{
+  "extends": "@sasyashri/config/typescript/base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true,
+    "declaration": true,
+    "removeComments": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictBindCallApply": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@/*": ["src/*"],
+      "@sasyashri/database": ["../../packages/database/src"],
+      "@sasyashri/auth": ["../../packages/auth/src"],
+      "@sasyashri/ai": ["../../packages/ai/src"],
+      "@sasyashri/payments": ["../../packages/payments/src"],
+      "@sasyashri/webrtc": ["../../packages/webrtc/src"],
+      "@sasyashri/ocr": ["../../packages/ocr/src"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test"]
+}

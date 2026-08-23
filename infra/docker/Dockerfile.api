@@ -1,0 +1,73 @@
+# NestJS API Dockerfile
+FROM node:20-alpine AS base
+
+# Install dependencies for native modules
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    postgresql-client \
+    redis \
+    tesseract-ocr \
+    tesseract-ocr-data-eng \
+    tesseract-ocr-data-hin
+
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages/config ./packages/config
+COPY packages/database ./packages/database
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --filter=@sasyashri/api --filter=@sasyashri/database --filter=@sasyashri/auth --filter=@sasyashri/ai --filter=@sasyashri/payments --filter=@sasyashri/webrtc --filter=@sasyashri/ocr
+
+# Generate Prisma client
+RUN pnpm --filter=@sasyashri/database db:generate
+
+# Development stage
+FROM base AS development
+ENV NODE_ENV=development
+COPY apps/api ./apps/api
+EXPOSE 4000
+CMD ["pnpm", "--filter=@sasyashri/api", "dev"]
+
+# Build stage
+FROM base AS builder
+ENV NODE_ENV=production
+COPY apps/api ./apps/api
+RUN pnpm --filter=@sasyashri/api build
+
+# Production stage
+FROM node:20-alpine AS production
+RUN apk add --no-cache \
+    postgresql-client \
+    redis \
+    tesseract-ocr \
+    tesseract-ocr-data-eng \
+    tesseract-ocr-data-hin
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages/config ./packages/config
+COPY packages/database ./packages/database
+COPY packages/auth ./packages/auth
+COPY packages/ai ./packages/ai
+COPY packages/payments ./packages/payments
+COPY packages/webrtc ./packages/webrtc
+COPY packages/ocr ./packages/ocr
+
+RUN pnpm install --frozen-lockfile --prod --filter=@sasyashri/api --filter=@sasyashri/database --filter=@sasyashri/auth --filter=@sasyashri/ai --filter=@sasyashri/payments --filter=@sasyashri/webrtc --filter=@sasyashri/ocr
+
+COPY --from=builder /app/packages/database/node_modules/.prisma ./packages/database/node_modules/.prisma
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
+
+EXPOSE 4000
+CMD ["node", "apps/api/dist/main.js"]

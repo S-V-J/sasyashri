@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 142 76% 36%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 142 20% 95%;
+    --secondary-foreground: 142 76% 36%;
+    --muted: 142 20% 95%;
+    --muted-foreground: 142 15% 40%;
+    --accent: 142 20% 95%;
+    --accent-foreground: 142 76% 36%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 142 20% 88%;
+    --input: 142 20% 88%;
+    --ring: 142 76% 36%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 142 30% 8%;
+    --foreground: 142 20% 95%;
+    --card: 142 30% 10%;
+    --card-foreground: 142 20% 95%;
+    --popover: 142 30% 10%;
+    --popover-foreground: 142 20% 95%;
+    --primary: 142 76% 45%;
+    --primary-foreground: 142 30% 8%;
+    --secondary: 142 20% 15%;
+    --secondary-foreground: 142 20% 95%;
+    --muted: 142 20% 15%;
+    --muted-foreground: 142 15% 60%;
+    --accent: 142 20% 15%;
+    --accent-foreground: 142 20% 95%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 142 20% 95%;
+    --border: 142 20% 20%;
+    --input: 142 20% 20%;
+    --ring: 142 76% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Hindi font support */
+  .font-hindi {
+    font-family: 'Noto Sans Devanagari', 'Noto Sans', system-ui, sans-serif;
+  }
+
+  /* PWA standalone mode */
+  @media (display-mode: standalone) {
+    body {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  }
+}
+
+@layer components {
+  /* Tab bar navigation */
+  .tab-bar {
+    @apply fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60;
+  }
+
+  /* Page transitions */
+  .page-transition {
+    @apply animate-in fade-in-0 duration-200;
+  }
+
+  /* Card hover effects */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-1;
+  }
+
+  /* Loading skeleton */
+  .skeleton {
+    @apply animate-pulse bg-muted rounded;
+  }
+}
+
+@layer utilities {
+  /* Scrollbar styling */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Text gradient */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80;
+  }
+
+  /* Glass morphism */
+  .glass {
+    @apply bg-background/80 backdrop-blur-md border border-border/50;
+  }
+}

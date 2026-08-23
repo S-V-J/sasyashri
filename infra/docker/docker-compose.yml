@@ -1,0 +1,335 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # INFRASTRUCTURE SERVICES
+  # ============================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sasyashri-postgres
+    environment:
+      POSTGRES_DB: sasyashri
+      POSTGRES_USER: sasyashri
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sasyashri_dev_password}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sasyashri -d sasyashri"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    container_name: sasyashri-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  minio:
+    image: minio/minio:latest
+    container_name: sasyashri-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ============================================
+  # REAL-TIME COMMUNICATION (LiveKit)
+  # ============================================
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: sasyashri-livekit
+    command:
+      - "--dev"
+      - "--bind"
+      - "0.0.0.0"
+      - "--keys"
+      - "${LIVEKIT_API_KEY:-devkey}:${LIVEKIT_API_SECRET:-devsecret123456789012345678901234}"
+    ports:
+      - "7880:7880"  # HTTP/WebSocket
+      - "7881:7881"  # TURN/UDP
+    environment:
+      LIVEKIT_KEYS: ${LIVEKIT_API_KEY:-devkey}:${LIVEKIT_API_SECRET:-devsecret123456789012345678901234}
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================
+  # APPLICATION SERVICES
+  # ============================================
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    container_name: sasyashri-api
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://sasyashri:${DB_PASSWORD:-sasyashri_dev_password}@postgres:5432/sasyashri?schema=public
+      - REDIS_URL=redis://redis:6379
+      - LIVEKIT_WS_URL=ws://livekit:7880
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret123456789012345678901234}
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_change_in_production_min_64_chars}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-dev_refresh_secret_change_in_production_min_64_chars}
+      - WEB_AUTHN_RP_ID=localhost
+      - WEB_AUTHN_ORIGIN=https://localhost:3000
+      - NVIDIA_RIVA_API_KEY=${NVIDIA_RIVA_API_KEY}
+      - NVIDIA_RIVA_ENDPOINT=${NVIDIA_RIVA_ENDPOINT}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - GSP_CLIENT_ID=${GSP_CLIENT_ID}
+      - GSP_CLIENT_SECRET=${GSP_CLIENT_SECRET}
+      - PORT=4000
+    ports:
+      - "4000:4000"
+    volumes:
+      - ../../apps/api:/app
+      - ../../packages:/packages
+      - /app/node_modules
+      - /app/dist
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    networks:
+      - sasyashri-network
+    develop:
+      watch:
+        - action: sync
+          path: ../../apps/api
+          target: /app
+          ignore:
+            - node_modules
+            - dist
+            - .turbo
+        - action: rebuild
+          path: ../../packages
+          target: /packages
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+    container_name: sasyashri-web
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+      - NEXT_PUBLIC_LIVEKIT_WS_URL=ws://localhost:7880
+      - NEXT_PUBLIC_APP_URL=https://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../apps/web:/app
+      - ../../packages:/packages
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
+    networks:
+      - sasyashri-network
+    develop:
+      watch:
+        - action: sync
+          path: ../../apps/web
+          target: /app
+          ignore:
+            - node_modules
+            - .next
+            - .turbo
+        - action: rebuild
+          path: ../../packages
+          target: /packages
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================
+  # OCR WORKER (Invoice Processing)
+  # ============================================
+
+  ocr-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ocr
+    container_name: sasyashri-ocr
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://sasyashri:${DB_PASSWORD:-sasyashri_dev_password}@postgres:5432/sasyashri?schema=public
+      - REDIS_URL=redis://redis:6379
+      - TESSDATA_PREFIX=/usr/share/tessdata
+    volumes:
+      - ../../packages/ocr:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # ============================================
+  # MONITORING (Optional - enable with profile)
+  # ============================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sasyashri-prometheus
+    profiles: ["monitoring"]
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - sasyashri-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sasyashri-grafana
+    profiles: ["monitoring"]
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - sasyashri-network
+
+  # ============================================
+  # NGINX REVERSE PROXY (Production-like)
+  # ============================================
+
+  nginx:
+    image: nginx:alpine
+    container_name: sasyashri-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - web
+      - api
+      - livekit
+    networks:
+      - sasyashri-network
+    profiles: ["proxy"]
+
+networks:
+  sasyashri-network:
+    driver: bridge
+    name: sasyashri-network
+
+volumes:
+  postgres_data:
+    name: sasyashri-postgres-data
+  redis_data:
+    name: sasyashri-redis-data
+  minio_data:
+    name: sasyashri-minio-data
+  prometheus_data:
+    name: sasyashri-prometheus-data
+  grafana_data:
+    name: sasyashri-grafana-data

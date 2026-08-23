@@ -1,0 +1,68 @@
+# OCR Worker Dockerfile
+FROM node:20-alpine AS base
+
+# Install Tesseract OCR with Hindi support
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    tesseract-ocr \
+    tesseract-ocr-data-eng \
+    tesseract-ocr-data-hin \
+    poppler-utils \
+    imagemagick
+
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages/config ./packages/config
+COPY packages/database ./packages/database
+COPY packages/ocr ./packages/ocr
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --filter=@sasyashri/ocr --filter=@sasyashri/database
+
+# Generate Prisma client
+RUN pnpm --filter=@sasyashri/database db:generate
+
+# Development stage
+FROM base AS development
+ENV NODE_ENV=development
+COPY packages/ocr ./packages/ocr
+CMD ["pnpm", "--filter=@sasyashri/ocr", "dev"]
+
+# Build stage
+FROM base AS builder
+ENV NODE_ENV=production
+COPY packages/ocr ./packages/ocr
+RUN pnpm --filter=@sasyashri/ocr build
+
+# Production stage
+FROM node:20-alpine AS production
+RUN apk add --no-cache \
+    tesseract-ocr \
+    tesseract-ocr-data-eng \
+    tesseract-ocr-data-hin \
+    poppler-utils \
+    imagemagick
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages/config ./packages/config
+COPY packages/database ./packages/database
+COPY packages/ocr ./packages/ocr
+
+RUN pnpm install --frozen-lockfile --prod --filter=@sasyashri/ocr --filter=@sasyashri/database
+
+COPY --from=builder /app/packages/database/node_modules/.prisma ./packages/database/node_modules/.prisma
+COPY --from=builder /app/packages/ocr/dist ./packages/ocr/dist
+COPY --from=builder /app/packages/ocr/package.json ./packages/ocr/package.json
+
+CMD ["node", "packages/ocr/dist/main.js"]

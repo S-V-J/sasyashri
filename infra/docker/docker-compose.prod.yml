@@ -1,0 +1,386 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # INFRASTRUCTURE SERVICES (Production)
+  # ============================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sasyashri-postgres
+    environment:
+      POSTGRES_DB: sasyashri
+      POSTGRES_USER: sasyashri
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"  # Only local access
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sasyashri -d sasyashri"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: sasyashri-redis
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: sasyashri-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    restart: unless-stopped
+
+  # ============================================
+  # LIVEKIT (Production)
+  # ============================================
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: sasyashri-livekit
+    command:
+      - "--bind"
+      - "0.0.0.0"
+      - "--keys"
+      - "${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}"
+      - "--redis"
+      - "redis://:${REDIS_PASSWORD}@redis:6379"
+    ports:
+      - "127.0.0.1:7880:7880"
+      - "7881:7881/udp"  # TURN needs UDP exposed
+    environment:
+      LIVEKIT_KEYS: ${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    restart: unless-stopped
+
+  # ============================================
+  # APPLICATION SERVICES (Production)
+  # ============================================
+
+  api:
+    image: ${DOCKER_HUB_USERNAME}/sasyashri-api:${API_TAG:-latest}
+    container_name: sasyashri-api
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://sasyashri:${DB_PASSWORD}@postgres:5432/sasyashri?schema=public
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - LIVEKIT_WS_URL=ws://livekit:7880
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - WEB_AUTHN_RP_ID=${WEB_AUTHN_RP_ID}
+      - WEB_AUTHN_ORIGIN=${WEB_AUTHN_ORIGIN}
+      - NVIDIA_RIVA_API_KEY=${NVIDIA_RIVA_API_KEY}
+      - NVIDIA_RIVA_ENDPOINT=${NVIDIA_RIVA_ENDPOINT}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+      - GSP_CLIENT_ID=${GSP_CLIENT_ID}
+      - GSP_CLIENT_SECRET=${GSP_CLIENT_SECRET}
+      - GSP_API_URL=${GSP_API_URL}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET=${MINIO_BUCKET}
+      - PORT=4000
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    image: ${DOCKER_HUB_USERNAME}/sasyashri-web:${WEB_TAG:-latest}
+    container_name: sasyashri-web
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://${WEB_AUTHN_RP_ID}/api
+      - NEXT_PUBLIC_LIVEKIT_WS_URL=wss://${WEB_AUTHN_RP_ID}/livekit
+      - NEXT_PUBLIC_APP_URL=https://${WEB_AUTHN_RP_ID}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # OCR WORKER (Production)
+  # ============================================
+
+  ocr-worker:
+    image: ${DOCKER_HUB_USERNAME}/sasyashri-ocr:${OCR_TAG:-latest}
+    container_name: sasyashri-ocr
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://sasyashri:${DB_PASSWORD}@postgres:5432/sasyashri?schema=public
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - TESSDATA_PREFIX=/usr/share/tessdata
+    volumes:
+      - ocr_temp:/tmp/ocr
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # NGINX REVERSE PROXY (Production with SSL)
+  # ============================================
+
+  nginx:
+    image: nginx:alpine
+    container_name: sasyashri-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - web
+      - api
+      - livekit
+    networks:
+      - sasyashri-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # MONITORING (Production)
+  # ============================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sasyashri-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    volumes:
+      - ./monitoring/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - sasyashri-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sasyashri-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://${WEB_AUTHN_RP_ID}/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - sasyashri-network
+    restart: unless-stopped
+
+  # ============================================
+  # LOG AGGREGATION (Optional - Loki)
+  # ============================================
+
+  loki:
+    image: grafana/loki:latest
+    container_name: sasyashri-loki
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./monitoring/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+    networks:
+      - sasyashri-network
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: sasyashri-promtail
+    volumes:
+      - ./monitoring/promtail-config.yaml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+    networks:
+      - sasyashri-network
+    restart: unless-stopped
+
+networks:
+  sasyashri-network:
+    driver: bridge
+    name: sasyashri-network
+
+volumes:
+  postgres_data:
+    name: sasyashri-postgres-data
+  redis_data:
+    name: sasyashri-redis-data
+  minio_data:
+    name: sasyashri-minio-data
+  prometheus_data:
+    name: sasyashri-prometheus-data
+  grafana_data:
+    name: sasyashri-grafana-data
+  loki_data:
+    name: sasyashri-loki-data
+  nginx_cache:
+    name: sasyashri-nginx-cache
+  ocr_temp:
+    name: sasyashri-ocr-temp

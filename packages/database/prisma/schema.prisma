@@ -1,0 +1,1757 @@
+// Sasyashri Database Schema
+// Multi-role agricultural wholesale platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  BUYER
+  SELLER
+  FARMER
+  FINANCIER
+  SALES_AGENT
+  TRANSPORTER
+  JOB_SEEKER
+  JOB_POSTER
+  QUALITY_LAB
+  ADMIN
+}
+
+enum AuthProvider {
+  CREDENTIALS
+  OTP
+  WEB_AUTHN
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  DISPATCHED
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  RETURNED
+  REFUNDED
+  DISPUTED
+}
+
+enum PaymentMethod {
+  PREPAID
+  COD
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIAL_REFUND
+  ESCROW_HELD
+  ESCROW_RELEASED
+}
+
+enum DealType {
+  FIXED_RATE
+  CUSTOM_DEAL
+}
+
+enum ContactFeeOutcome {
+  DEAL_ACCEPTED_ON_PLATFORM
+  DEAL_REJECTED
+  DEAL_OFF_PLATFORM
+}
+
+enum ProductCategory {
+  ANAAJ
+  MASALA
+}
+
+enum ProductCondition {
+  KACCHA
+  TAYYAR
+  AVASHEH
+  GHARELU
+}
+
+enum StockUnit {
+  KG
+  QUINTAL
+  TONNE
+  BAG
+  SACK
+  CRATE
+  BUNDLE
+  PIECE
+  LITRE
+  CUSTOM
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  LOAN_REPAYMENT
+  LOAN_DISBURSEMENT
+  SALARY
+  STOCK_PURCHASE
+  STOCK_HOLDING_COST
+  COMMISSION
+  CONTACT_FEE
+  CALL_CHARGE
+  SUBSCRIPTION
+  PLATFORM_FEE
+  TAX
+}
+
+enum LoanType {
+  KCC
+  BANK_AGRI
+  PRIVATE
+  PLATFORM_FINANCIER
+}
+
+enum LandType {
+  OWNED
+  RENTED
+  LEASED
+}
+
+enum GigStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum VehicleType {
+  TRUCK
+  TEMPO
+  TRACTOR_TROLLEY
+  PICKUP
+  CONTAINER
+  TRACTOR
+  HARVESTER
+  THRESHER
+  ROTAVATOR
+  TILLER
+  IRRIGATION_PUMP
+  SPRAYER
+  PADDY_TRANSPLANTER
+  SEED_DRILL
+}
+
+enum JobType {
+  PERMANENT
+  SEASONAL
+  GIG
+}
+
+enum LabTestType {
+  MOISTURE_CONTENT
+  PESTICIDE_RESIDUE
+  ADULTERATION
+  PRODUCT_GRADING
+  SOIL_TESTING
+  CROP_HEALTH
+  FSSAI_CERTIFICATION
+}
+
+enum NotificationType {
+  ORDER_PLACED
+  ORDER_ACCEPTED
+  ORDER_DISPATCHED
+  ORDER_DELIVERED
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  REFUND_INITIATED
+  REFUND_COMPLETED
+  STOCK_LOW
+  STOCK_EXPIRY
+  LOAN_DUE
+  CALL_INCOMING
+  MESSAGE_RECEIVED
+  AI_ALERT
+  TAX_DEADLINE
+  JOB_APPLICATION
+  GIG_ASSIGNED
+  TRANSPORT_ORDER
+  DISPUTE_RAISED
+  SYSTEM
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  MEDIATION
+  RESOLVED_BUYER
+  RESOLVED_SELLER
+  RESOLVED_PARTIAL
+  CLOSED
+}
+
+// ============================================
+// CORE MODELS
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  phone         String?   @unique
+  passwordHash  String?
+  name          String?
+  avatar        String?
+  roles         UserRole[] @default([BUYER])
+  activeRole    UserRole? @default(BUYER)
+
+  // Auth
+  emailVerified   Boolean   @default(false)
+  phoneVerified   Boolean   @default(false)
+  twoFactorEnabled Boolean  @default(false)
+  twoFactorSecret String?
+  backupCodes     String[] @default([])
+
+  // WebAuthn (Passkeys)
+  webAuthnCredentials WebAuthnCredential[]
+
+  // Device registration (for sellers)
+  devices       Device[]
+
+  // Profile
+  address       Address?
+  gstin         String?   @unique
+  pan           String?   @unique
+  bankAccount   BankAccount?
+
+  // KYC
+  kycStatus     KycStatus @default(PENDING)
+  kycDocuments  KycDocument[]
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  buyerProfile      BuyerProfile?
+  sellerProfile     SellerProfile?
+  farmerProfile     FarmerProfile?
+  financierProfile  FinancierProfile?
+  agentProfile      AgentProfile?
+  transporterProfile TransporterProfile?
+  labProfile        LabProfile?
+  adminProfile      AdminProfile?
+
+  orders            Order[]           @relation("BuyerOrders")
+  sellerOrders      Order[]           @relation("SellerOrders")
+  sentMessages      Message[]         @relation("SentMessages")
+  receivedMessages  Message[]         @relation("ReceivedMessages")
+  notifications     Notification[]
+  transactions      Transaction[]
+  disputes          Dispute[]         @relation("UserDisputes")
+  customDeals       CustomDeal[]      @relation("BuyerCustomDeals")
+  sellerCustomDeals CustomDeal[]      @relation("SellerCustomDeals")
+  contactFeePayments ContactFeePayment[]
+  callSessions      CallSession[]     @relation("CallerSessions")
+  receivedCalls     CallSession[]     @relation("ReceiverSessions")
+  gigs              Gig[]             @relation("GigPoster")
+  assignedGigs      Gig[]             @relation("GigWorker")
+  jobs              Job[]             @relation("JobPoster")
+  jobApplications   JobApplication[]
+  investments       Investment[]
+  transportOrders   TransportOrder[]  @relation("TransportOrderPoster")
+  assignedTransport TransportOrder[]  @relation("TransporterOrders")
+  labRequests       LabRequest[]      @relation("LabRequester")
+  assignedLabTests  LabRequest[]      @relation("LabAssigned")
+
+  @@index([email])
+  @@index([phone])
+  @@index([roles])
+}
+
+model WebAuthnCredential {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId    String   @unique
+  publicKey       String
+  counter         Int      @default(0)
+  transports      String[] @default([])
+  nickname        String?
+  createdAt       DateTime @default(now())
+  lastUsedAt      DateTime?
+
+  @@index([userId])
+}
+
+model Device {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId      String   @unique
+  name          String?
+  userAgent     String?
+  ipAddress     String?
+  trusted       Boolean  @default(false)
+  lastUsedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Address {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  line1       String
+  line2       String?
+  city        String
+  district    String
+  state       String
+  pincode     String
+  landmark    String?
+  latitude    Float?
+  longitude   Float?
+  isDefault   Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BankAccount {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountHolderName String
+  accountNumber   String
+  ifscCode        String
+  bankName        String
+  branchName      String?
+  accountType     String   @default("SAVINGS")
+  upiId           String?
+  isVerified      Boolean  @default(false)
+  isPrimary       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+enum KycStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model KycDocument {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // PAN, AADHAAR, GST, FSSAI, BANK_STATEMENT, OTHER
+  documentUrl String
+  status      KycStatus @default(PENDING)
+  verifiedAt  DateTime?
+  verifiedBy  String?
+  rejectionReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ============================================
+// BUYER PROFILE
+// ============================================
+
+model BuyerProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName    String?
+  businessType    String?  // RETAILER, RESTAURANT, MANUFACTURER, COOPERATIVE, INDIVIDUAL
+  gstin           String?  @unique
+  preferredCategories ProductCategory[]
+  defaultPaymentMethod PaymentMethod @default(PREPAID)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ============================================
+// SELLER PROFILE (HIGH SECURITY)
+// ============================================
+
+model SellerProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName        String
+  tradeLicenseNumber  String?  @unique
+  fssaiLicenseNumber  String?  @unique
+  gstin               String?  @unique
+  pan                 String?  @unique
+
+  // Business Details
+  establishedYear     Int?
+  employeeCount       Int      @default(0)
+  annualTurnover      Float?
+  warehouseAddresses  Json?    // Array of addresses
+
+  // Custom Deal Settings
+  minDiscountPercent  Float    @default(0)
+  maxDiscountPercent  Float    @default(15)
+  fixedDiscountPercent Float?  // If set, overrides range
+  contactRevealFee    Float    @default(0) // 0 = free (seller pays ₹99)
+  contactRevealFree   Boolean  @default(false)
+
+  // Call Settings
+  callEnabled         Boolean  @default(true)
+  callRatePerMinute   Float    @default(0)
+  callTerms           String?  // What seller commits to on paid calls
+  callAvailableHours  Json?    // { start: "09:00", end: "18:00", timezone: "IST", days: [1,2,3,4,5] }
+
+  // AI Agent Config
+  aiAgentEnabled      Boolean  @default(false)
+  aiAgentConfig       Json?    // Voice, tone, language, knowledge boundaries
+  aiAgentWorkingHours Json?
+
+  // Financial
+  platformCommissionRate Float  @default(0.01) // 1%
+  totalSales          Float    @default(0)
+  totalOrders         Int      @default(0)
+  rating              Float    @default(0)
+  reviewCount         Int      @default(0)
+
+  // Status
+  isActive            Boolean  @default(true)
+  isVerified          Boolean  @default(false)
+  verifiedAt          DateTime?
+  suspensionReason    String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  stockItems          StockItem[]
+  invoices            Invoice[]
+  transactions        Transaction[] @relation("SellerTransactions")
+  customDeals         CustomDeal[]  @relation("SellerCustomDeals")
+  contactFeePayments  ContactFeePayment[] @relation("SellerContactFees")
+  callSessions        CallSession[] @relation("SellerCallSessions")
+  payouts             Payout[]
+  loans               Loan[]        @relation("SellerLoans")
+  payrollRecords      PayrollRecord[]
+  taxFilings          TaxFiling[]
+
+  @@index([businessName])
+  @@index([gstin])
+}
+
+// ============================================
+// FARMER PROFILE
+// ============================================
+
+model FarmerProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farmerId        String   @unique // Government farmer ID / Kisan ID
+  kccNumber       String?  @unique
+
+  // Land Records
+  lands           LandRecord[]
+
+  // Financial
+  totalLoans      Float    @default(0)
+  totalOutstanding Float   @default(0)
+  creditScore     Int?
+
+  // AI Assistant
+  aiAssistantEnabled Boolean @default(false)
+  aiAssistantData    Json?   // Trained data, preferences
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  cropCycles      CropCycle[]
+  loans           Loan[]     @relation("FarmerLoans")
+  gigs            Gig[]      @relation("FarmerGigs")
+  machineryBookings MachineryBooking[]
+  investments     Investment[] @relation("FarmerInvestments")
+}
+
+model LandRecord {
+  id            String    @id @default(cuid())
+  farmerProfileId String
+  farmerProfile FarmerProfile @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
+  surveyNumber  String
+  area          Float     // In acres/hectares
+  areaUnit      String    @default("ACRE")
+  landType      LandType
+  village       String
+  tehsil        String
+  district      String
+  state         String
+  pincode       String
+  latitude      Float?
+  longitude     Float?
+
+  // Rental details (if rented/leased)
+  annualRent    Float?
+  leaseStartDate DateTime?
+  leaseEndDate   DateTime?
+  landownerName  String?
+  landownerContact String?
+
+  // Current crop
+  currentCropId String?
+  currentCrop   CropCycle? @relation("CurrentCropLand")
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([farmerProfileId])
+  @@index([district, state])
+}
+
+model CropCycle {
+  id              String   @id @default(cuid())
+  farmerProfileId String
+  farmerProfile   FarmerProfile @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
+  landRecordId    String
+  landRecord      LandRecord @relation("CurrentCropLand", fields: [landRecordId], references: [id])
+  cropName        String
+  variety         String?
+  season          String   // KHARIF, RABI, ZAID, PERENNIAL
+  sowingDate      DateTime
+  expectedHarvestDate DateTime
+  actualHarvestDate DateTime?
+  areaPlanted     Float
+  areaUnit        String   @default("ACRE")
+
+  // Costs
+  seedCost        Float    @default(0)
+  fertilizerCost  Float    @default(0)
+  pesticideCost   Float    @default(0)
+  irrigationCost  Float    @default(0)
+  laborCost       Float    @default(0)
+  machineryCost   Float    @default(0)
+  storageCost     Float    @default(0)
+  transportCost   Float    @default(0)
+  otherCosts      Float    @default(0)
+  totalCost       Float    @default(0)
+
+  // Yield
+  expectedYield   Float?
+  actualYield     Float?
+  yieldUnit       String   @default("QUINTAL")
+
+  // Revenue
+  sellingPrice    Float?
+  totalRevenue    Float    @default(0)
+  profit          Float    @default(0)
+
+  // Status
+  status          String   @default("PLANNED") // PLANNED, GROWING, HARVESTED, SOLD, COMPLETED
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([farmerProfileId])
+  @@index([season, status])
+}
+
+// ============================================
+// FINANCIER PROFILE
+// ============================================
+
+model FinancierProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entityType      String   // INDIVIDUAL, COMPANY, BANK, NBFC, COOPERATIVE
+  companyName     String?
+  licenseNumber   String?  @unique // RBI/SEBI registration
+  riskAppetite    String   @default("MODERATE") // LOW, MODERATE, HIGH
+  minInvestment   Float    @default(100000)
+  maxInvestment   Float    @default(10000000)
+  expectedReturn  Float    @default(12) // Annual %
+  preferredSectors String[] @default([])
+  totalInvested   Float    @default(0)
+  activeInvestments Int    @default(0)
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  investments     Investment[]
+}
+
+// ============================================
+// SALES AGENT PROFILE
+// ============================================
+
+model AgentProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentCode       String   @unique
+  specializations ProductCategory[]
+  serviceRegions  String[] // Districts/States
+  rating          Float    @default(0)
+  completedTasks  Int      @default(0)
+  totalEarnings   Float    @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  buyerTasks      AgentTask[] @relation("BuyerTasks")
+  platformTasks   AgentTask[] @relation("PlatformTasks")
+  commissions     Commission[]
+}
+
+// ============================================
+// TRANSPORTER PROFILE
+// ============================================
+
+model TransporterProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transporterCode String   @unique
+  vehicles        Vehicle[]
+  machinery       Machinery[]
+  rating          Float    @default(0)
+  completedTrips  Int      @default(0)
+  totalEarnings   Float    @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transportOrders TransportOrder[] @relation("TransporterOrders")
+}
+
+model Vehicle {
+  id              String     @id @default(cuid())
+  transporterId   String
+  transporter     TransporterProfile @relation(fields: [transporterId], references: [id], onDelete: Cascade)
+  vehicleNumber   String     @unique
+  vehicleType     VehicleType
+  capacity        Float      // In tonnes
+  capacityUnit    String     @default("TONNE")
+  length          Float?
+  width           Float?
+  height          Float?
+  pricePerKm      Float?
+  pricePerLoad    Float?
+  serviceRegions  String[]   // Districts/States
+  availability    Json?      // Calendar/schedule
+  documents       Json?      // RC, Insurance, Permit, Fitness
+  isActive        Boolean    @default(true)
+  currentLocation Json?      // { lat, lng, updatedAt }
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([transporterId])
+  @@index([vehicleType])
+}
+
+model Machinery {
+  id              String     @id @default(cuid())
+  transporterId   String
+  transporter     TransporterProfile @relation(fields: [transporterId], references: [id], onDelete: Cascade)
+  name            String
+  type            VehicleType
+  specifications  Json?
+  pricePerHour    Float?
+  pricePerAcre    Float?
+  pricePerDay     Float?
+  serviceRegions  String[]
+  availability    Json?
+  documents       Json?
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([transporterId])
+  @@index([type])
+}
+
+// ============================================
+// QUALITY LAB PROFILE
+// ============================================
+
+model LabProfile {
+  id              String       @id @default(cuid())
+  userId          String       @unique
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  labName         String
+  fssaiLicense    String       @unique
+  nablAccredited  Boolean      @default(false)
+  services        LabTestType[]
+  serviceRegions  String[]
+  priceList       Json?        // Test type -> price
+  rating          Float        @default(0)
+  completedTests  Int          @default(0)
+  isVerified      Boolean      @default(false)
+  verifiedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  labRequests     LabRequest[] @relation("LabAssigned")
+  agents          LabAgent[]
+}
+
+model LabAgent {
+  id          String   @id @default(cuid())
+  labId       String
+  lab         LabProfile @relation(fields: [labId], references: [id], onDelete: Cascade)
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  designation String
+  contactPhone String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([labId])
+}
+
+// ============================================
+// ADMIN PROFILE
+// ============================================
+
+model AdminProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================
+// PRODUCT CATALOG
+// ============================================
+
+model Product {
+  id              String           @id @default(cuid())
+  name            String
+  nameHindi       String?
+  scientificName  String?
+  category        ProductCategory
+  condition       ProductCondition
+  description     String?
+  descriptionHindi String?
+  imageUrls       String[]         @default([])
+  unit            StockUnit
+  unitQuantity    Float            @default(1) // e.g., 50 for 50kg bag
+  moq             Float            @default(1) // Minimum order quantity
+  moqUnit         StockUnit
+
+  // Platform pricing (set by admin/data analyst)
+  platformPrice   Float            // Price per unit
+  platformPriceUpdatedAt DateTime?
+
+  // Seller's expected price (internal)
+  // This is NOT exposed to buyers
+  // Stored in StockItem
+
+  // Tax
+  gstRate         Float            @default(0)
+  hsnCode         String?
+
+  // Quality
+  gradeStandards  Json?            // Grade definitions
+  qualityParams   Json?            // Moisture, protein, etc.
+
+  // Metadata
+  isActive        Boolean          @default(true)
+  isSeasonal      Boolean          @default(false)
+  seasonMonths    Int[]            @default([])
+  tags            String[]         @default([])
+  sortOrder       Int              @default(0)
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  stockItems      StockItem[]
+  orderItems      OrderItem[]
+  customDealItems CustomDealItem[]
+
+  @@index([category, condition])
+  @@index([isActive])
+  @@index([name])
+}
+
+model StockItem {
+  id              String   @id @default(cuid())
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity        Float    @default(0)
+  reservedQty     Float    @default(0) // Reserved for orders
+  availableQty    Float    @default(0) // Computed: quantity - reservedQty
+  grade           String?
+  qualityNotes    String?
+
+  // Pricing (Seller's internal)
+  purchasePrice   Float    // Cost price per unit
+  expectedPrice   Float    // Seller's expected selling price per unit
+  minSellingPrice Float?   // Minimum acceptable price
+
+  // Storage
+  storageLocation String?
+  storedAt        DateTime @default(now())
+  expiryDate      DateTime?
+  batchNumber     String?
+
+  // Alerts
+  lowStockThreshold Float  @default(10)
+  expiryAlertDays   Int    @default(30)
+
+  // Source
+  invoiceId       String?
+  invoice         Invoice? @relation(fields: [invoiceId], references: [id])
+
+  // Status
+  isActive        Boolean  @default(true)
+  isListed        Boolean  @default(false) // Listed on platform for fixed-rate
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sellerId, productId, batchNumber])
+  @@index([sellerId, isActive])
+  @@index([productId, isListed])
+  @@index([expiryDate])
+}
+
+// ============================================
+// INVOICE OCR
+// ============================================
+
+model Invoice {
+  id              String   @id @default(cuid())
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  fileUrl         String
+  fileName        String
+  fileSize        Int
+  mimeType        String
+
+  // OCR Results
+  ocrStatus       String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  ocrData         Json?    // Extracted fields
+  ocrConfidence   Float?
+  processedAt     DateTime?
+
+  // Supplier Info (extracted)
+  supplierName    String?
+  supplierGstin   String?
+  invoiceNumber   String?
+  invoiceDate     DateTime?
+  invoiceValue    Float?
+
+  // Line items (extracted)
+  lineItems       Json?    // Array of {product, qty, price, tax}
+
+  // Approval
+  isApproved      Boolean  @default(false)
+  approvedAt      DateTime?
+  approvedBy      String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stockItems      StockItem[]
+
+  @@index([sellerId, ocrStatus])
+}
+
+// ============================================
+// ORDERS & TRANSACTIONS
+// ============================================
+
+model Order {
+  id              String       @id @default(cuid())
+  orderNumber     String       @unique
+  buyerId         String
+  buyer           User         @relation("BuyerOrders", fields: [buyerId], references: [id])
+  sellerId        String?
+  seller          User?        @relation("SellerOrders", fields: [sellerId], references: [id])
+  dealType        DealType     @default(FIXED_RATE)
+  customDealId    String?
+  customDeal      CustomDeal?  @relation(fields: [customDealId], references: [id])
+
+  // Pricing
+  subtotal        Float        @default(0)
+  discount        Float        @default(0)
+  taxAmount       Float        @default(0)
+  deliveryCharge  Float        @default(0)
+  codCharge       Float        @default(0) // 1% for COD
+  totalAmount     Float        @default(0)
+  paidAmount      Float        @default(0)
+
+  // Payment
+  paymentMethod   PaymentMethod @default(PREPAID)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentId       String?      // Razorpay/Cashfree payment ID
+  escrowId        String?      // Escrow/nodal account reference
+
+  // COD Security Deposit
+  codSecurityDeposit Float     @default(0)
+  depositRefunded   Boolean    @default(false)
+
+  // Status
+  status          OrderStatus  @default(PENDING)
+  statusHistory   Json?        // Array of {status, timestamp, note}
+
+  // Delivery
+  deliveryAddress Json         // Full address snapshot
+  deliveryDate    DateTime?
+  deliveryOtp     String?
+  deliveryProof   String?      // Photo/signature URL
+
+  // Platform commission (for custom deals)
+  platformCommission Float     @default(0)
+
+  // Timestamps
+  orderedAt       DateTime     @default(now())
+  acceptedAt      DateTime?
+  dispatchedAt    DateTime?
+  deliveredAt     DateTime?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+
+  // Relations
+  items           OrderItem[]
+  transactions    Transaction[]
+  disputes        Dispute[]
+  transportOrder  TransportOrder?
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([orderNumber])
+  @@index([orderedAt])
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id])
+  productName     String   // Snapshot
+  productNameHindi String?
+  unit            StockUnit
+  unitQuantity    Float
+  quantity        Float    // Number of units
+  unitPrice       Float    // Price per unit at time of order
+  totalPrice      Float
+  gstRate         Float
+  gstAmount       Float
+
+  // Quality at delivery
+  deliveredGrade  String?
+  qualityNotes    String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([orderId])
+}
+
+model Transaction {
+  id              String           @id @default(cuid())
+  transactionId   String           @unique
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  sellerId        String?
+  seller          SellerProfile?   @relation("SellerTransactions", fields: [sellerId], references: [id])
+  orderId         String?
+  order           Order?           @relation(fields: [orderId], references: [id])
+  type            TransactionType
+  amount          Float
+  currency        String           @default("INR")
+  status          PaymentStatus    @default(PENDING)
+  paymentMethod   PaymentMethod?
+  paymentGateway  String?          // RAZORPAY, CASHFREE, MANUAL
+  gatewayRef      String?          // Payment gateway reference
+  description     String?
+  metadata        Json?
+  processedAt     DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@index([userId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([orderId])
+  @@index([type, status])
+}
+
+// ============================================
+// CUSTOM DEALS (NEGOTIATION)
+// ============================================
+
+model CustomDeal {
+  id                  String   @id @default(cuid())
+  buyerId             String
+  buyer               User     @relation("BuyerCustomDeals", fields: [buyerId], references: [id])
+  sellerId            String
+  seller              SellerProfile @relation("SellerCustomDeals", fields: [sellerId], references: [id])
+  productId           String
+  product             Product  @relation(fields: [productId], references: [id])
+
+  // Negotiation
+  buyerOfferPrice     Float    // Buyer's offered price per unit
+  sellerCounterPrice  Float?   // Seller's counter offer
+  agreedPrice         Float?   // Final agreed price
+  quantity            Float
+  unit                StockUnit
+
+  // Contact Fee
+  contactFee          Float    @default(0)
+  contactFeePaid      Boolean  @default(false)
+  contactFeePaymentId String?
+  contactFeeOutcome   ContactFeeOutcome?
+
+  // Status
+  status              String   @default("INITIATED") // INITIATED, CONTACT_PAID, NEGOTIATING, ACCEPTED, REJECTED, EXPIRED, OFF_PLATFORM
+  buyerMessage        String?
+  sellerMessage       String?
+  expiresAt           DateTime
+
+  // Outcome
+  orderId             String?
+  order               Order?   @relation(fields: [orderId], references: [id])
+  offPlatformDeal     Boolean  @default(false)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  acceptedAt          DateTime?
+  rejectedAt          DateTime?
+
+  items               CustomDealItem[]
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([productId])
+}
+
+model CustomDealItem {
+  id              String   @id @default(cuid())
+  customDealId    String
+  customDeal      CustomDeal @relation(fields: [customDealId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id])
+  quantity        Float
+  unit            StockUnit
+  unitPrice       Float
+  totalPrice      Float
+
+  @@index([customDealId])
+}
+
+model ContactFeePayment {
+  id              String   @id @default(cuid())
+  buyerId         String
+  buyer           User     @relation(fields: [buyerId], references: [id])
+  sellerId        String
+  seller          SellerProfile @relation("SellerContactFees", fields: [sellerId], references: [id])
+  customDealId    String
+  customDeal      CustomDeal @relation(fields: [customDealId], references: [id])
+  amount          Float
+  platformShare   Float    @default(0)
+  sellerShare     Float    @default(0)
+  buyerRefund     Float    @default(0)
+  status          PaymentStatus @default(PENDING)
+  paymentId       String?
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([customDealId])
+}
+
+// ============================================
+// PAYOUTS (SELLER)
+// ============================================
+
+model Payout {
+  id              String   @id @default(cuid())
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id])
+  grossAmount     Float
+  commission      Float
+  netAmount       Float
+  status          PaymentStatus @default(PENDING)
+  paymentId       String?
+  initiatedAt     DateTime @default(now())
+  processedAt     DateTime?
+
+  @@index([sellerId, status])
+  @@index([orderId])
+}
+
+// ============================================
+// LOANS & FINANCING
+// ============================================
+
+model Loan {
+  id              String     @id @default(cuid())
+  borrowerType    String     // FARMER, SELLER, BUYER
+  borrowerId      String     // User ID
+  financierId     String?
+  financier       FinancierProfile? @relation(fields: [financierId], references: [id])
+  sellerId        String?
+  seller          SellerProfile? @relation("SellerLoans", fields: [sellerId], references: [id])
+  farmerId        String?
+  farmer          FarmerProfile? @relation("FarmerLoans", fields: [farmerId], references: [id])
+
+  loanType        LoanType
+  amount          Float
+  interestRate    Float      // Annual %
+  interestType    String     @default("SIMPLE") // SIMPLE, COMPOUND
+  tenureMonths    Int
+  startDate       DateTime
+  endDate         DateTime
+  emiAmount       Float?
+  repaymentSchedule Json?    // Array of {date, amount, principal, interest, status}
+
+  // Tracking
+  disbursedAmount Float      @default(0)
+  repaidAmount    Float      @default(0)
+  outstandingAmount Float    @default(0)
+  totalInterestPaid Float    @default(0)
+  status          String     @default("PENDING") // PENDING, ACTIVE, COMPLETED, DEFAULTED, RESTRUCTURED
+
+  // Platform facilitated
+  platformFacilitated Boolean @default(false)
+  platformFee       Float    @default(0)
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  repayments      LoanRepayment[]
+
+  @@index([borrowerId, status])
+  @@index([financierId, status])
+}
+
+model LoanRepayment {
+  id          String   @id @default(cuid())
+  loanId      String
+  loan        Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  dueDate     DateTime
+  amount      Float
+  principal   Float
+  interest    Float
+  paidAmount  Float    @default(0)
+  paidAt      DateTime?
+  status      String   @default("PENDING") // PENDING, PAID, PARTIAL, OVERDUE, WAIVED
+  paymentId   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([loanId, dueDate])
+  @@index([status])
+}
+
+// ============================================
+// PAYROLL
+// ============================================
+
+model PayrollRecord {
+  id              String   @id @default(cuid())
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  employeeName    String
+  employeeId      String?
+  role            String
+  salaryMonth     DateTime
+  basicSalary     Float
+  allowances      Float    @default(0)
+  deductions      Float    @default(0)
+  netSalary       Float
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentDate     DateTime?
+  paymentId       String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sellerId, salaryMonth])
+  @@unique([sellerId, employeeId, salaryMonth])
+}
+
+// ============================================
+// TAX FILING
+// ============================================
+
+model TaxFiling {
+  id              String   @id @default(cuid())
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  filingType      String   // GSTR1, GSTR3B, GSTR9, E_INVOICE, E_WAY_BILL
+  period          String   // YYYY-MM
+  status          String   @default("DRAFT") // DRAFT, FILED, ACCEPTED, ERROR
+  filingData      Json?    // Return data
+  acknowledgement   String? // ARN
+  filedAt         DateTime?
+  dueDate         DateTime
+  errorMessage    String?
+  gspResponse     Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sellerId, filingType, period])
+  @@index([sellerId, status])
+  @@index([dueDate])
+}
+
+// ============================================
+// GIGS & MACHINERY BOOKING
+// ============================================
+
+model Gig {
+  id              String     @id @default(cuid())
+  posterId        String
+  poster          User       @relation("GigPoster", fields: [posterId], references: [id])
+  workerId        String?
+  worker          User?      @relation("GigWorker", fields: [workerId], references: [id])
+  farmerId        String?
+  farmer          FarmerProfile? @relation("FarmerGigs", fields: [farmerId], references: [id])
+  title           String
+  description     String
+  category        String     // SOWING, WEEDING, HARVESTING, PEST_CONTROL, IRRIGATION, TRANSPORT, OTHER
+  requiredSkills  String[]
+  location        Json       // { address, lat, lng }
+  startDate       DateTime
+  endDate         DateTime
+  durationDays    Int
+  wageType        String     @default("DAILY") // DAILY, HOURLY, FIXED, PER_ACRE
+  wageAmount      Float
+  totalBudget     Float
+  status          GigStatus  @default(OPEN)
+  assignedAt      DateTime?
+  completedAt     DateTime?
+  rating          Float?
+  review          String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([posterId, status])
+  @@index([workerId, status])
+  @@index([farmerId, status])
+  @@index([status, startDate])
+}
+
+model MachineryBooking {
+  id              String   @id @default(cuid())
+  farmerId        String
+  farmer          FarmerProfile @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  machineryId     String
+  machinery       Machinery  @relation(fields: [machineryId], references: [id])
+  transporterId   String
+  transporter     TransporterProfile @relation(fields: [transporterId], references: [id])
+  startDate       DateTime
+  endDate         DateTime
+  bookingType     String   @default("HOURLY") // HOURLY, DAILY, PER_ACRE, FIXED
+  rate            Float
+  totalAmount     Float
+  area            Float?   // Acres
+  status          String   @default("PENDING") // PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentId       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([farmerId, status])
+  @@index([machineryId, status])
+  @@index([transporterId, status])
+}
+
+// ============================================
+// JOBS
+// ============================================
+
+model Job {
+  id              String     @id @default(cuid())
+  posterId        String
+  poster          User       @relation("JobPoster", fields: [posterId], references: [id])
+  title           String
+  description     String
+  jobType         JobType
+  category        String     // FARMING, WAREHOUSING, TRANSPORT, SALES, ACCOUNTS, TECH, OTHER
+  location        Json       // { address, city, district, state, lat, lng }
+  salaryMin       Float?
+  salaryMax       Float?
+  salaryPeriod    String     @default("MONTHLY") // MONTHLY, DAILY, HOURLY, FIXED
+  experienceMin   Int        @default(0)
+  experienceMax   Int?
+  qualifications  String[]
+  skills          String[]
+  benefits        String[]
+  vacancies       Int        @default(1)
+  status          String     @default("ACTIVE") // ACTIVE, PAUSED, CLOSED, FILLED
+  postedAt        DateTime   @default(now())
+  expiresAt       DateTime?
+  filledAt        DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  applications    JobApplication[]
+
+  @@index([posterId, status])
+  @@index([jobType, category, status])
+  @@index([location])
+}
+
+model JobApplication {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicantId String
+  applicant   User     @relation(fields: [applicantId], references: [id])
+  coverLetter String?
+  resumeUrl   String?
+  status      String   @default("APPLIED") // APPLIED, SHORTLISTED, INTERVIEW, REJECTED, HIRED
+  appliedAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([jobId, applicantId])
+  @@index([applicantId, status])
+}
+
+// ============================================
+// TRANSPORT ORDERS
+// ============================================
+
+model TransportOrder {
+  id              String   @id @default(cuid())
+  orderNumber     String   @unique
+  posterId        String
+  poster          User     @relation("TransportOrderPoster", fields: [posterId], references: [id])
+  posterType      String   // SELLER, AGENT, FARMER, PLATFORM
+  referenceType   String?  // ORDER, GIG, MACHINERY, CUSTOM
+  referenceId     String?
+
+  transporterId   String?
+  transporter     TransporterProfile? @relation("TransporterOrders", fields: [transporterId], references: [id])
+
+  // Bidding
+  biddingEnabled  Boolean  @default(true)
+  biddingEndsAt   DateTime?
+  minBidAmount    Float?
+  maxBidAmount    Float?
+  winningBid      Float?
+
+  // Load Details
+  loadType        String   // PRODUCTS, MACHINERY, HARVEST, INPUTS
+  productIds      String[]
+  totalWeight     Float    // Tonnes
+  volume          Float?   // Cubic meters
+  packaging       String?  // BAGS, CRATES, BULK, LOOSE
+
+  // Route
+  pickupAddress   Json
+  deliveryAddress Json
+  distanceKm      Float?
+  estimatedTime   Int?     // Hours
+
+  // Schedule
+  pickupDate      DateTime
+  deliveryDate    DateTime
+  flexibleTiming  Boolean  @default(false)
+
+  // Pricing
+  quotedAmount    Float?
+  finalAmount     Float?
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentId       String?
+
+  // Status
+  status          String   @default("OPEN") // OPEN, BIDDING, ASSIGNED, PICKED_UP, IN_TRANSIT, DELIVERED, COMPLETED, CANCELLED
+  assignedAt      DateTime?
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+  completedAt     DateTime?
+
+  // Tracking
+  currentLocation Json?
+  trackingUpdates Json?    // Array of {location, timestamp, status}
+
+  // Rating
+  transporterRating Float?
+  posterRating      Float?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([posterId, status])
+  @@index([transporterId, status])
+  @@index([status, pickupDate])
+  @@index([orderNumber])
+}
+
+// ============================================
+// QUALITY LAB REQUESTS
+// ============================================
+
+model LabRequest {
+  id              String       @id @default(cuid())
+  requestNumber   String       @unique
+  requesterId     String
+  requester       User         @relation("LabRequester", fields: [requesterId], references: [id])
+  requesterType   String       // SELLER, BUYER, FARMER, AGENT
+
+  labId           String?
+  lab             LabProfile?  @relation("LabAssigned", fields: [labId], references: [id])
+  agentId         String?
+  agent           LabAgent?    @relation(fields: [agentId], references: [id])
+
+  testTypes       LabTestType[]
+  sampleDetails   Json         // { productId, productName, quantity, batchNumber, location }
+  pickupAddress   Json
+  preferredDate   DateTime?
+
+  // Pricing
+  quotedPrice     Float?
+  finalPrice      Float?
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentId       String?
+
+  // Status
+  status          String       @default("REQUESTED") // REQUESTED, QUOTED, ACCEPTED, SAMPLE_COLLECTED, TESTING, COMPLETED, CANCELLED
+  assignedAt      DateTime?
+  sampleCollectedAt DateTime?
+  testingStartedAt DateTime?
+  completedAt     DateTime?
+
+  // Results
+  reportUrl       String?
+  certificateUrl  String?
+  results         Json?
+  passed          Boolean?
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([requesterId, status])
+  @@index([labId, status])
+  @@index([requestNumber])
+}
+
+// ============================================
+// INVESTMENTS
+// ============================================
+
+model Investment {
+  id              String   @id @default(cuid())
+  financierId     String
+  financier       FinancierProfile @relation(fields: [financierId], references: [id], onDelete: Cascade)
+  investeeType    String   // FARMER, SELLER, BUYER
+  investeeId      String   // User ID
+  farmerId        String?
+  farmer          FarmerProfile? @relation("FarmerInvestments", fields: [farmerId], references: [id])
+
+  amount          Float
+  equityPercent   Float?   // For equity investments
+  interestRate    Float?   // For debt investments
+  returnType      String   // EQUITY, DEBT, REVENUE_SHARE, PROFIT_SHARE
+  termMonths      Int
+  startDate       DateTime
+  endDate         DateTime
+
+  // Terms
+  agreementUrl    String?
+  milestones      Json?    // Array of {date, condition, amount}
+
+  // Tracking
+  disbursedAmount Float    @default(0)
+  returnedAmount  Float    @default(0)
+  status          String   @default("PROPOSED") // PROPOSED, ACCEPTED, ACTIVE, COMPLETED, DEFAULTED
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([financierId, status])
+  @@index([investeeType, investeeId])
+}
+
+// ============================================
+// COMMISSIONS (AGENTS)
+// ============================================
+
+model Commission {
+  id              String   @id @default(cuid())
+  agentId         String
+  agent           AgentProfile @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  orderId         String?
+  order           Order?   @relation(fields: [orderId], references: [id])
+  customDealId    String?
+  customDeal      CustomDeal? @relation(fields: [customDealId], references: [id])
+  taskId          String?
+  task            AgentTask? @relation(fields: [taskId], references: [id])
+  type            String   // TRANSACTION, TASK, REFERRAL
+  amount          Float
+  rate            Float    // Percentage
+  status          PaymentStatus @default(PENDING)
+  paidAt          DateTime?
+  paymentId       String?
+  createdAt       DateTime @default(now())
+
+  @@index([agentId, status])
+}
+
+// ============================================
+// AGENT TASKS
+// ============================================
+
+model AgentTask {
+  id              String   @id @default(cuid())
+  taskNumber      String   @unique
+  postedBy        String   // PLATFORM, BUYER
+  buyerId         String?
+  buyer           User?    @relation("BuyerTasks", fields: [buyerId], references: [id])
+  agentId         String?
+  agent           AgentProfile? @relation("PlatformTasks", fields: [agentId], references: [id])
+  type            String   // SOURCING, QUALITY_CHECK, DELIVERY_COORDINATION, NEGOTIATION, WAREHOUSE_VISIT
+  title           String
+  description     String
+  location        Json
+  productIds      String[]
+  budget          Float?
+  deadline        DateTime
+  status          String   @default("OPEN") // OPEN, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED
+  assignedAt      DateTime?
+  completedAt     DateTime?
+  result          Json?
+  rating          Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([agentId, status])
+  @@index([buyerId, status])
+  @@index([status, deadline])
+}
+
+// ============================================
+// COMMUNICATION
+// ============================================
+
+model CallSession {
+  id              String   @id @default(cuid())
+  callId          String   @unique
+  callerId        String
+  caller          User     @relation("CallerSessions", fields: [callerId], references: [id])
+  receiverId      String
+  receiver        User     @relation("ReceiverSessions", fields: [receiverId], references: [id])
+  receiverType    String   // SELLER, FARMER, AGENT, LAB
+  livekitRoomId   String
+  livekitRoomName String
+
+  // Call Details
+  type            String   @default("VOICE") // VOICE, VIDEO
+  isAiHandled     Boolean  @default(false)
+  aiAgentId       String?  // If AI handled
+  durationSeconds Int      @default(0)
+
+  // Charging (for human-answered seller calls)
+  chargePerMinute Float    @default(0)
+  totalCharge     Float    @default(0)
+  charged         Boolean  @default(false)
+  chargeRefunded  Boolean  @default(false)
+  refundReason    String?
+
+  // Terms (for paid calls)
+  sellerTerms     String?
+  termsFulfilled  Boolean?
+
+  // Status
+  status          String   @default("INITIATED") // INITIATED, RINGING, CONNECTED, ENDED, FAILED, MISSED
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([callerId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([livekitRoomId])
+}
+
+model Message {
+  id              String   @id @default(cuid())
+  senderId        String
+  sender          User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId      String
+  receiver        User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  conversationId  String
+  content         String
+  contentType     String   @default("TEXT") // TEXT, IMAGE, FILE, AUDIO, LOCATION, SYSTEM
+  fileUrl         String?
+  fileName        String?
+  fileSize        Int?
+  readAt          DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, receiverId])
+  @@index([receiverId, readAt])
+}
+
+model Conversation {
+  id              String   @id @default(cuid())
+  participantIds  String[]
+  participantTypes String[] // BUYER, SELLER, AGENT, etc.
+  lastMessageId   String?
+  lastMessageAt   DateTime?
+  unreadCounts    Json?    // { userId: count }
+  metadata        Json?    // { orderId, customDealId, taskId }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([participantIds])
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  titleHindi  String?
+  message     String
+  messageHindi String?
+  data        Json?            // { orderId, dealId, actionUrl, etc. }
+  readAt      DateTime?
+  sentAt      DateTime         @default(now())
+  channel     String           @default("PUSH") // PUSH, SMS, EMAIL, IN_APP
+  providerId  String?          // External provider message ID
+
+  @@index([userId, readAt])
+  @@index([userId, type])
+  @@index([sentAt])
+}
+
+// ============================================
+// DISPUTES
+// ============================================
+
+model Dispute {
+  id              String       @id @default(cuid())
+  disputeNumber   String       @unique
+  orderId         String
+  order           Order        @relation(fields: [orderId], references: [id])
+  raisedById      String
+  raisedBy        User         @relation("UserDisputes", fields: [raisedById], references: [id])
+  againstId       String
+  against         User         @relation(fields: [againstId], references: [id])
+  type            String       // QUALITY, QUANTITY, PRICE, DELIVERY, PAYMENT, CALL_TERMS, OTHER
+  reason          String
+  evidence        Json?        // Photos, documents
+  claimedAmount   Float?
+
+  // Resolution
+  status          DisputeStatus @default(OPEN)
+  assignedAdminId String?
+  assignedAdmin   User?        @relation(fields: [assignedAdminId], references: [id])
+  resolution      String?
+  resolutionAmount Float?
+  resolvedAt      DateTime?
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([orderId])
+  @@index([raisedById, status])
+  @@index([againstId, status])
+  @@index([status])
+}
+
+// ============================================
+// AI ASSISTANT DATA (PER USER)
+// ============================================
+
+model AiAssistantContext {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role            UserRole // SELLER, FARMER
+
+  // Knowledge base (vector embeddings stored separately in pgvector)
+  knowledgeChunks Json?    // Metadata for RAG chunks
+  lastTrainedAt   DateTime?
+  trainingStatus  String   @default("IDLE") // IDLE, TRAINING, READY, ERROR
+
+  // Configuration
+  config          Json     // Voice, language, personality, boundaries
+  systemPrompt    String?
+
+  // Usage
+  totalInteractions Int    @default(0)
+  lastInteractionAt DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, role])
+}
+
+// ============================================
+// PLATFORM SETTINGS (ADMIN)
+// ============================================
+
+model PlatformSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  category    String   // PRICING, FEES, COMMISSION, LIMITS, FEATURES
+  isPublic    Boolean  @default(false) // Can be read by non-admins
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([category])
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String
+  entityType  String
+  entityId    String
+  oldData     Json?
+  newData     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

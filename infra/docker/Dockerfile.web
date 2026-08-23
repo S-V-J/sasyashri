@@ -1,0 +1,51 @@
+# Next.js Web Dockerfile
+FROM node:20-alpine AS base
+
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages/config ./packages/config
+COPY packages/ui ./packages/ui
+COPY packages/database ./packages/database
+COPY packages/auth ./packages/auth
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --filter=@sasyashri/web --filter=@sasyashri/ui --filter=@sasyashri/database --filter=@sasyashri/auth
+
+# Development stage
+FROM base AS development
+ENV NODE_ENV=development
+COPY apps/web ./apps/web
+EXPOSE 3000
+CMD ["pnpm", "--filter=@sasyashri/web", "dev"]
+
+# Build stage
+FROM base AS builder
+ENV NODE_ENV=production
+COPY apps/web ./apps/web
+RUN pnpm --filter=@sasyashri/web build
+
+# Production stage
+FROM node:20-alpine AS production
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages/config ./packages/config
+COPY packages/ui ./packages/ui
+COPY packages/database ./packages/database
+COPY packages/auth ./packages/auth
+
+RUN pnpm install --frozen-lockfile --prod --filter=@sasyashri/web --filter=@sasyashri/ui --filter=@sasyashri/database --filter=@sasyashri/auth
+
+COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/apps/web/public ./apps/web/public
+
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]
